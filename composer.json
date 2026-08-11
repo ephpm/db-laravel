@@ -1,0 +1,44 @@
+{
+    "name": "ephpm/db-laravel",
+    "description": "Laravel database driver ('driver' => 'ephpm') over ePHPm's in-process DB bridge — MySQL-dialect SQL through the ephpm_db_* SAPI functions, no PDO, no socket round-trips.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["laravel", "database", "driver", "ephpm", "sqlite", "sapi", "eloquent"],
+    "homepage": "https://ephpm.dev",
+    "support": {
+        "issues": "https://github.com/ephpm/db-laravel/issues",
+        "source": "https://github.com/ephpm/db-laravel"
+    },
+    "require": {
+        "php": "^8.2",
+        "illuminate/database": "^10.0 || ^11.0 || ^12.0",
+        "illuminate/support": "^10.0 || ^11.0 || ^12.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5 || ^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Ephpm\\Db\\Laravel\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Ephpm\\Db\\Laravel\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Ephpm\\Db\\Laravel\\EphpmDbServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "minimum-stability": "stable"
+}
