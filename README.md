@@ -54,10 +54,10 @@ expects.
 - **PHP 8.2+**
 - **Laravel 10.x, 11.x, or 12.x** (`illuminate/database` constraint is
   `^10.0 || ^11.0 || ^12.0`).
-- **An ePHPm build from current `main`** — the `ephpm_db_query()` /
-  `ephpm_db_execute()` SAPI functions this driver calls are **not in any
-  tagged ePHPm release yet**. You need a build from `main` with an
-  embedded SQLite backend configured:
+- **ePHPm v0.6.3 or newer** (current release: v0.8.6) — the
+  `ephpm_db_query()` / `ephpm_db_execute()` SAPI functions this driver
+  calls first shipped in the v0.6.3 release. You need an embedded SQLite
+  backend configured:
 
   ```toml
   # ephpm.toml
