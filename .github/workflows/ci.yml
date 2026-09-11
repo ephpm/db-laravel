@@ -48,5 +48,23 @@ jobs:
       - name: Run PHPUnit
         run: vendor/bin/phpunit --testdox
 
+  validate:
+    name: Validate composer.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+          tools: composer:v2
+
+      # Validate the committed composer.json on a pristine checkout. This
+      # library ships no composer.lock, so validation runs on the manifest
+      # alone — deliberately separate from the test matrix, whose per-leg
+      # `composer update` writes a version-pinned lock that would otherwise
+      # trip the lock content-hash check.
       - name: Validate composer.json
-        run: git checkout -- composer.json && composer validate --strict
+        run: composer validate --strict
