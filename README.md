@@ -54,7 +54,7 @@ expects.
 - **PHP 8.2+**
 - **Laravel 10.x, 11.x, or 12.x** (`illuminate/database` constraint is
   `^10.0 || ^11.0 || ^12.0`).
-- **ePHPm v0.6.3 or newer** (current release: v0.8.6) — the
+- **ePHPm v0.6.3 or newer** (current release: v0.10.2) — the
   `ephpm_db_query()` / `ephpm_db_execute()` SAPI functions this driver
   calls first shipped in the v0.6.3 release. You need an embedded SQLite
   backend configured:
@@ -147,7 +147,9 @@ ignored if present.
 |---------|--------|
 | `DB::select` / query builder `get()`, `first()`, `count()`, `pluck()` | yes — arrays of `stdClass`, native int/float/null column types |
 | `insert()` | yes — returns `bool` |
-| `insertGetId()` | yes — id wired from `ephpm_db_execute()`'s `last_insert_id` |
+| `insertGetId()` | yes — id wired from the bridge's `last_insert_id` |
+| `insertOrIgnore()` | yes — the compiled `INSERT IGNORE` is translated to SQLite `INSERT OR IGNORE` |
+| `upsert()` | **no** — rejected with a clear error; see [What is not supported](#what-is-not-supported) |
 | `update()` / `delete()` affected-row counts | yes |
 | `DB::transaction()` commit, and rollback + rethrow on exception | yes |
 | Nested transactions (`SAVEPOINT transN`) | yes — see [Transactions](#transactions) |
@@ -160,7 +162,7 @@ ignored if present.
 | `pretend()` / query logging | yes |
 | Schema builder / migrations | emits MySQL DDL through the MySQL schema grammar (verified via `pretend()`); execution depends on litewire's DDL translation — see below |
 
-The suite (28 tests) runs the driver against a `pdo_sqlite` polyfill of
+The suite (30 tests) runs the driver against a `pdo_sqlite` polyfill of
 the bridge (`SqlitePdoDbOps`) that reproduces the native result
 and error shapes documented in ePHPm's `ephpm_wrapper.c`, including
 litewire's errno mapping. What the polyfill does **not** reproduce is
@@ -170,6 +172,15 @@ of that SQL is ePHPm's (tested) responsibility.
 
 ## What is not supported
 
+- **`upsert()`** — the MySQL query grammar compiles it to
+  `INSERT … ON DUPLICATE KEY UPDATE`, which the embedded engine
+  (litewire → Turso) rejects. Turso does not honour
+  `INSERT … ON CONFLICT … DO UPDATE` either, and rewriting to
+  `INSERT OR REPLACE` would silently overwrite columns you did not name in
+  the update set (and reassign `AUTO_INCREMENT` ids), so there is no safe
+  automatic translation. The driver throws a `RuntimeException` explaining
+  this rather than running it wrong. Use `insertOrIgnore()` followed by an
+  explicit `update()`, or perform the insert-or-update in application code.
 - **`selectResultSets()`** — the bridge stages exactly one result set
   per statement; this method throws `RuntimeException`.
 - **`cursor()` is not lazy.** `ephpm_db_query()` buffers the complete

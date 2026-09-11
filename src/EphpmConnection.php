@@ -176,6 +176,7 @@ class EphpmConnection extends MySqlConnection
      */
     public function statement($query, $bindings = []): bool
     {
+        $query = $this->translateForBridge($query);
         $params = $this->bridgeBindings($bindings);
 
         return $this->run($query, $bindings, function ($query) use ($params) {
@@ -183,10 +184,14 @@ class EphpmConnection extends MySqlConnection
                 return true;
             }
 
-            $result = $this->ops->execute($query, $params);
+            // Route through the unified ephpm_db_run(): a statement that
+            // turns out to produce a rowset (e.g. INSERT ... RETURNING) is
+            // executed correctly rather than mis-routed through execute(),
+            // and the last_insert_id is still captured for insertGetId().
+            $result = $this->ops->run($query, $params);
 
             $this->recordsHaveBeenModified();
-            $this->rememberLastInsertId($result['last_insert_id']);
+            $this->rememberLastInsertId((int) ($result['last_insert_id'] ?? 0));
 
             return true;
         });
@@ -200,6 +205,7 @@ class EphpmConnection extends MySqlConnection
      */
     public function affectingStatement($query, $bindings = []): int
     {
+        $query = $this->translateForBridge($query);
         $params = $this->bridgeBindings($bindings);
 
         return $this->run($query, $bindings, function ($query) use ($params) {
@@ -223,18 +229,69 @@ class EphpmConnection extends MySqlConnection
      */
     public function unprepared($query): bool
     {
+        $query = $this->translateForBridge($query);
+
         return $this->run($query, [], function ($query) {
             if ($this->pretending()) {
                 return true;
             }
 
-            $result = $this->ops->execute($query);
+            // Unified entry point: an unprepared SELECT is no longer
+            // mis-routed through execute() (which would discard its rows).
+            $result = $this->ops->run($query);
 
-            $this->recordsHaveBeenModified($result['affected_rows'] > 0);
-            $this->rememberLastInsertId($result['last_insert_id']);
+            $this->recordsHaveBeenModified();
+            $this->rememberLastInsertId((int) ($result['last_insert_id'] ?? 0));
 
             return true;
         });
+    }
+
+    /**
+     * Rewrite (or reject) the MySQL-only DML the query grammar compiles that
+     * the embedded engine (litewire → Turso) cannot run.
+     *
+     * - `insertOrIgnore()` compiles to `INSERT IGNORE INTO …`; MySQL's IGNORE
+     *   modifier maps exactly to SQLite's `INSERT OR IGNORE` (skip rows that
+     *   violate a constraint), so it is rewritten transparently.
+     * - `upsert()` compiles to `INSERT … ON DUPLICATE KEY UPDATE …`, which the
+     *   embedded engine rejects. Turso does not honour `ON CONFLICT … DO
+     *   UPDATE` either, and `INSERT OR REPLACE` would silently overwrite
+     *   columns the caller did not list in the upsert's update set (and
+     *   reassign AUTOINCREMENT ids), so there is no automatic rewrite that
+     *   preserves upsert semantics. It is rejected with an actionable error
+     *   rather than run wrong.
+     *
+     * @param string $query
+     */
+    protected function translateForBridge($query): string
+    {
+        $query = (string) $query;
+
+        if (
+            preg_match('/^\s*INSERT\b/i', $query)
+            && preg_match('/\bON\s+DUPLICATE\s+KEY\s+UPDATE\b/i', $query)
+        ) {
+            throw new \RuntimeException(
+                'ephpm-db: upsert() is not supported on the embedded database. '
+                . 'It compiles to MySQL "ON DUPLICATE KEY UPDATE", which '
+                . 'litewire/Turso rejects, and no automatic rewrite preserves '
+                . 'its column-level update semantics (INSERT OR REPLACE would '
+                . 'overwrite unlisted columns and reassign AUTOINCREMENT ids). '
+                . 'Use insertOrIgnore() followed by an explicit update(), or '
+                . 'perform the insert-or-update in application code.'
+            );
+        }
+
+        $rewritten = preg_replace(
+            '/^(\s*)INSERT\s+IGNORE\s+INTO\b/i',
+            '${1}INSERT OR IGNORE INTO',
+            $query,
+            1,
+            $count
+        );
+
+        return (\is_string($rewritten) && $count > 0) ? $rewritten : $query;
     }
 
     /**

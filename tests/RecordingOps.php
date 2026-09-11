@@ -36,4 +36,14 @@ final class RecordingOps implements DbOpsInterface
 
         return $this->inner->execute($sql, $params);
     }
+
+    public function run(string $sql, array $params = []): array
+    {
+        // run() is an execute-path call from the connection's point of view;
+        // record it in the same log so existing assertions on `executed`
+        // still see statements routed through the unified entry point.
+        $this->executed[] = $sql;
+
+        return $this->inner->run($sql, $params);
+    }
 }
