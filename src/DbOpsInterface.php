@@ -52,4 +52,24 @@ interface DbOpsInterface
      *                    `SQLSTATE[xxxxx]: <backend message>`
      */
     public function execute(string $sql, array $params = []): array;
+
+    /**
+     * Execute SQL once and report what it actually did — the unified entry
+     * point mirroring the native `ephpm_db_run()` (ePHPm issue #263).
+     *
+     * `has_rowset` is read from the executed statement, not guessed from the
+     * SQL's first keyword, so a statement run through {@see \Ephpm\Db\Laravel\EphpmConnection::statement()}
+     * or `unprepared()` that turns out to produce a rowset is handled
+     * correctly instead of being mis-routed through `execute()` (which would
+     * discard the rows). `rows`/`columns` are empty for an OK outcome;
+     * `affected_rows`/`last_insert_id` are zero for a result set.
+     *
+     * @param list<null|bool|int|float|string> $params positional `?` bindings
+     *
+     * @return array{has_rowset: bool, rows: list<array<string, null|int|float|string>>, columns: list<array{name: string, type: ?string}>, affected_rows: int, last_insert_id: int}
+     *
+     * @throws \Exception code = MySQL errno (e.g. 1062), message
+     *                    `SQLSTATE[xxxxx]: <backend message>`
+     */
+    public function run(string $sql, array $params = []): array;
 }

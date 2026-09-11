@@ -321,6 +321,63 @@ final class EphpmConnectionTest extends TestCase
     }
 
     #[Test]
+    public function insert_or_ignore_is_translated_to_sqlite_and_skips_conflicts(): void
+    {
+        $db = $this->connection($ops);
+        $db->table('users')->insert(['name' => 'Alice', 'email' => 'same@example.com']);
+
+        // insertOrIgnore compiles to MySQL `insert ignore into`; the driver
+        // rewrites it to `insert or ignore into`, which the engine accepts.
+        $affected = $db->table('users')->insertOrIgnore([
+            ['name' => 'Clone', 'email' => 'same@example.com'], // conflicts -> ignored
+            ['name' => 'Bob', 'email' => 'bob@example.com'],    // new
+        ]);
+
+        $this->assertSame(1, $affected);
+        $this->assertSame(2, $db->table('users')->count());
+        $this->assertSame(
+            ['Alice', 'Bob'],
+            $db->table('users')->orderBy('id')->pluck('name')->all()
+        );
+
+        // What reached the bridge was the SQLite-compatible form.
+        $ranInsertOrIgnore = array_filter(
+            $ops->executed,
+            static fn (string $sql): bool => stripos($sql, 'insert or ignore into') !== false
+        );
+        $this->assertNotEmpty($ranInsertOrIgnore);
+        $this->assertEmpty(array_filter(
+            $ops->executed,
+            static fn (string $sql): bool => stripos($sql, 'insert ignore') !== false
+        ));
+    }
+
+    #[Test]
+    public function upsert_is_rejected_with_an_actionable_error(): void
+    {
+        $db = $this->connection($ops);
+        $db->table('users')->insert(['name' => 'Alice', 'email' => 'a@example.com']);
+
+        try {
+            $db->table('users')->upsert(
+                [['name' => 'Alice II', 'email' => 'a@example.com', 'visits' => 5]],
+                ['email'],
+                ['visits']
+            );
+            $this->fail('expected upsert() to be rejected');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('upsert() is not supported', $e->getMessage());
+            $this->assertStringContainsString('ON DUPLICATE KEY UPDATE', $e->getMessage());
+        }
+
+        // The ON DUPLICATE KEY UPDATE statement never reached the bridge.
+        $this->assertEmpty(array_filter(
+            $ops->executed,
+            static fn (string $sql): bool => stripos($sql, 'on duplicate key update') !== false
+        ));
+    }
+
+    #[Test]
     public function select_result_sets_is_unsupported(): void
     {
         $db = $this->connection();
